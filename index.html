@@ -849,7 +849,7 @@ dialog .close{justify-self:end;position:sticky;top:0;width:42px;height:42px;bord
 <dialog id="privacy"><div class="d-in">
   <button class="close" type="button" data-close>Fermer</button>
   <h2>Confiden<em>tialité</em></h2>
-  <p>Les informations envoyées par les formulaires (nom, téléphone, e-mail, détails du projet, images) servent uniquement à traiter votre demande de rendez-vous ou de carte cadeau. Elles sont transmises au studio par e-mail via le service FormSubmit, et ne sont ni vendues ni cédées à des tiers.</p>
+  <p>Les informations envoyées par les formulaires (nom, téléphone, e-mail, détails du projet, images) servent uniquement à traiter votre demande de rendez-vous ou de carte cadeau. Elles sont transmises au studio par e-mail via un service hébergé chez Supabase (serveurs à Paris) et l'envoi d'e-mails Brevo (France), et ne sont ni vendues ni cédées à des tiers.</p>
   <p>Elles sont conservées au plus trois ans après votre dernier contact avec le studio, puis supprimées.</p>
   <p>Les paiements en ligne sont traités par Stripe : le studio n'a jamais accès à vos coordonnées bancaires.</p>
   <p>Vous pouvez demander à consulter, corriger ou supprimer vos données en écrivant à piercevaltattoo@gmail.com.</p>
@@ -913,7 +913,7 @@ const daysBetween=(a,b)=>Math.round((b-a)/864e5);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function dur([a,b]){const w=x=>Math.round(x/7),m=x=>Math.round(x/30);if(b<=56)return w(a)+' à '+w(b)+' semaines';if(a>=56)return m(a)+' à '+m(b)+' mois';return w(a)+' semaines à '+m(b)+' mois'}
 const LIVE=/piercevaltattoo\.fr$/.test(location.hostname);
-const MAIL_ENDPOINT='https://formsubmit.co/piercevaltattoo@gmail.com';
+const MAIL_ENDPOINT='https://nfnbseonwgmtouxsaajd.supabase.co/functions/v1/formulaire';
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function parisNow(){const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date());const g=t=>+p.find(x=>x.type===t).value;return new Date(g('year'),g('month')-1,g('day'),g('hour')%24,g('minute'))}
 const NOW=parisNow(), TODAY=new Date(NOW.getFullYear(),NOW.getMonth(),NOW.getDate()), T=iso(TODAY);
