@@ -864,7 +864,7 @@ dialog .close{justify-self:end;position:sticky;top:0;width:42px;height:42px;bord
    Tout ce qui change dans la vie du studio se modifie ici.
    ========================================================= */
 const CONFIG = {
-  api: '', // adresse du service de vérification des cartes (Cloudflare), vide tant qu'il n'est pas en place
+  api: 'https://nfnbseonwgmtouxsaajd.supabase.co/functions/v1/carte-cadeau', // service des cartes cadeaux (paiement, carte après paiement confirmé, vérification)
   hours: {3:[["10:00","12:00"],["14:00","18:00"]],4:[["10:00","12:00"],["14:00","18:00"]],5:[["10:00","12:00"],["14:00","18:00"]],6:[["10:00","12:00"],["14:00","18:00"]]},
   bookingDays: { tattoo:[3,4,5,6], piercing:[3,4,5,6], conseil:[3,4,5,6] },
   tattooSlots: [["Matin","10:00"],["Après-midi","14:00"]],
@@ -878,16 +878,9 @@ const CONFIG = {
   promos: [
     { code:"BIENVENUE", percent:10, start:"2026-10-01", end:"2026-12-31", text:"-10 % sur votre réservation en ligne" }
   ],
-  // Cartes cadeaux : liens de paiement Stripe par montant ("libre" = montant choisi sur la page Stripe)
+  // Cartes cadeaux : montant choisi sur le site, paiement Stripe créé par le service, carte valable 12 mois
   gift: {
-    validityMonths: 12,
-    links: {
-      30:"https://buy.stripe.com/fZubJ17fA2b21wr9TkbQY0I",
-      50:"https://buy.stripe.com/7sY7sL6bw16Y8YT6H8bQY0J",
-      100:"https://buy.stripe.com/5kQ00j43o4ja7UP6H8bQY0K",
-      150:"https://buy.stripe.com/28E5kD7fA4jafnh5D4bQY0L",
-      libre:"https://buy.stripe.com/fZu7sL0RcdTKa2XaXobQY0M"
-    }
+    validityMonths: 12
   }
 };
 // Durées de cicatrisation indicatives, en jours (mini, maxi). À valider par le perceur.
@@ -1090,23 +1083,25 @@ go('type',false);
   $('#giftForm').onsubmit=async e=>{e.preventDefault();
     const a=val();if(!a||a<20){toast('Choisissez un montant, à partir de 20 €');return}
     if(!$('#gPour').value.trim()){$('#gPour').focus();toast('Indiquez à qui vous l\'offrez');return}
-    const g={code:newCode(),amount:a,de:$('#gDe').value.trim(),pour:$('#gPour').value.trim(),msg:$('#gMsg').value.trim(),email:$('#gMail').value.trim(),at:Date.now()};
-    store.set('giftPending',g);
-    if(!LIVE){g.paid=true;g.date=Date.now();showOk(g,true);return}
-    try{await fetch(MAIL_ENDPOINT.replace('.co/','.co/ajax/'),{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({_subject:`Carte cadeau ${g.code} · ${a} € · en attente de paiement`,_template:'table',_captcha:'false','Numéro':g.code,'Statut':'en attente de paiement (vérifier la confirmation Stripe)','Montant':a+' €','De la part de':g.de,'Pour':g.pour,'Message':g.msg,email:g.email})})}catch(err){}
-    const link=G.links[amount]||G.links.libre;const u=new URL(link);u.searchParams.set('client_reference_id',g.code);if(g.email)u.searchParams.set('prefilled_email',g.email);
-    location.href=u.toString()};
+    const g={amount:a,de:$('#gDe').value.trim(),pour:$('#gPour').value.trim(),msg:$('#gMsg').value.trim(),email:$('#gMail').value.trim(),at:Date.now()};
+    if(!LIVE){g.code=newCode();g.paid=true;g.date=Date.now();showOk(g,true);return}
+    const btn=$('#giftBtn');if(btn)btn.disabled=true;
+    try{const r=await fetch(CONFIG.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'creer',amount:a,pour:g.pour,de:g.de,msg:g.msg,email:g.email})});
+      const j=await r.json();if(!r.ok||!j.url)throw new Error(j.erreur||'');location.href=j.url}
+    catch(err){if(btn)btn.disabled=false;toast(err.message||'Le paiement n\'a pas pu s\'ouvrir. Réessayez dans un instant ou appelez le studio.')}};
 
   // Retour de Stripe : vérification du paiement puis PDF
   (async function(){const q=new URLSearchParams(location.search);if(q.get('cadeau')!=='ok')return;
-    const pend=store.get('giftPending')||{};let g=Object.assign({},pend);
-    if(CONFIG.api)try{const r=await fetch(CONFIG.api+'/verify-gift?session='+encodeURIComponent(q.get('session')||''));if(r.ok){const v=await r.json();if(v.ok){g=Object.assign(g,{code:v.code||g.code,amount:v.amount||g.amount,pour:v.pour||g.pour,paid:true,date:(v.date||Date.now()/1000)*1000});}}}catch(e){}
-    if(!g.code){return}
-    showOk(g,false);store.set('giftPending',null);history.replaceState(null,'',location.pathname+'#cadeau');
-    setTimeout(()=>$('#cadeau').scrollIntoView({behavior:'smooth'}),300)})();
+    const session=q.get('session')||'';let v=null;
+    for(let i=0;i<6&&!(v&&v.ok);i++){try{const r=await fetch(CONFIG.api+'?action=verify-gift&session='+encodeURIComponent(session));v=await r.json()}catch(e){}if(!(v&&v.ok))await new Promise(r=>setTimeout(r,2500))}
+    history.replaceState(null,'',location.pathname+'#cadeau');
+    setTimeout(()=>$('#cadeau').scrollIntoView({behavior:'smooth'}),300);
+    if(!(v&&v.ok)){toast('Le paiement n\'est pas encore confirmé par la banque. Rechargez la page dans une minute, ou appelez le studio au 02 98 59 45 33.');return}
+    const g={code:v.code,amount:v.amount,pour:v.pour,de:v.de||'',msg:v.msg||'',paid:true,date:v.date*1000};
+    showOk(g,false)})();
 
   function showOk(g,demo){
-    const until=new Date(g.date||Date.now());until.setMonth(until.getMonth()+G.validityMonths);g.until=until.toLocaleDateString('fr-FR');
+    const until=new Date(g.date||Date.now());until.setMonth(until.getMonth()+(G.validityMonths||12));g.until=until.toLocaleDateString('fr-FR');
     $('#vCode').textContent=g.code;$('#vAmount').textContent=g.amount+' €';
     $('#giftForm').hidden=true;$('#voucher').hidden=true;const ok=$('#giftOk');ok.hidden=false;
     ok.innerHTML=`<h3>Merci, la carte <em>est prête</em></h3><p class="lead">Carte n° <b>${g.code}</b>, valable jusqu'au ${g.until}.${demo?' <small>(Aperçu : en ligne, cette étape passe d\'abord par le paiement Stripe.)</small>':''}</p><canvas id="giftCv" width="1600" height="1000" aria-label="Aperçu de la carte cadeau"></canvas><div class="row"><button type="button" class="btn btn-ink" id="pdfBtn"><span>Télécharger la carte (PDF)</span> <span class="arr">↓</span></button><button type="button" class="btn btn-line" id="giftAgain" style="color:var(--on-skin)"><span>Offrir une autre carte</span></button></div>`;
